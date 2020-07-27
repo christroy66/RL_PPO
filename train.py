@@ -12,9 +12,42 @@ from keras.optimizers import Adam
 #https://github.com/openai/gym/blob/master/gym/envs/classic_control/cartpole.py
 
 
+def get_model_actor(input_dims):
+
+    state_input = Input(shape=input_dims)
+
+    x = Dense(10, activation="relu")(state_input)
+    x = Dense(20, activation="relu")(x)
+    x = Dense (10, activation="relu")(x)
+
+    out_actions=Dense(n_actions, activation="softmax")(x)
+
+    model = Model(inputs=state_input, outputs=out_actions)
+    model.compile(optimizer=Adam(), loss="mse")
+    model.summary()
+
+    return model
+
+
+def get_model_critic(input_dims):
+
+    state_input = Input(shape=input_dims)
+
+    x = Dense(10, activation="relu")(state_input)
+    x = Dense(20, activation="relu")(x)
+    x = Dense (10, activation="relu")(x)
+
+    out_actions=Dense(1, activation="tanh")(x)
+
+    model = Model(inputs=state_input, outputs=out_actions)
+    model.compile(optimizer=Adam(), loss="mse")
+    model.summary()
+
+    return model
+
+
 env = gym.make("CartPole-v1")
 state = env.reset()
-
 state_dims = env.observation_space.shape
 n_actions = env.action_space.n
 #print(state_dims)
@@ -33,47 +66,44 @@ n_actions = env.action_space.n
 
 
 
-def get_model_actor(input_dims):
-
-    state_input = Input(shape=input_dims)
-
-    x = Dense(10, activation="relu")(state_input)
-    x = Dense(20, activation="relu")(x)
-    x = Dense (10, activation="relu")(x)
-
-    out_actions=Dense(n_actions, activation="softmax")(x)
-
-    model = Model(inputs=state_input, outputs=out_actions)
-    model.compile(optimizer=Adam(), loss="mse")
-
-    return model
-
-
-
 ppo_steps = 10
 
 states = []
 actions = []
+actions_probs = []
 values = [] #value of critic model
 masks = [] #indicates if game is over or not
 rewards = []
 
 model_actor = get_model_actor(input_dims = state_dims)
+model_critic = get_model_critic(input_dims = state_dims)
 
 
 for itr in range(ppo_steps):
 
     state_input = K.expand_dims(state, 0)
     action_dist = model_actor.predict([state_input], steps = 1)
+    q_value = model_critic.predict([state_input], steps = 1)
     action = np.random.choice(n_actions, p=action_dist[0,:])
     print(action)
+    print(action_dist)
 
 
     env.render() #display and render the environment
     #action = env.action_space.sample() #sample a random action
     observation, reward, done, info = env.step(action) #return after each step
-    #print(observation)
-    #print(info)
+    mask = not done
+    
+    states.append(state)
+    actions.append(action)
+    values.append(q_value)
+    masks.append(mask)
+    rewards.append(reward)
+    actions_probs.append(action_dist)
+
+    state = observation #change initial state after each iteration
+
+  
 
     if done:
         env.reset()
